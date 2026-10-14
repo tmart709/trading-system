@@ -143,3 +143,21 @@ def test_lst_daily_stats_high_and_low():
     assert st[date(2026, 10, 13)] == (60, 42, 24)
     days = _complete_days(st)
     assert days["high"][date(2026, 10, 13)] == 60 and days["low"][date(2026, 10, 13)] == 42
+
+
+def test_mixture_single_component_matches_normal():
+    from strategies.weather_model import mixture_distribution
+    a = mixture_distribution([(71.3, 2.1, 1.0)])
+    b = high_distribution(71.3, 2.1)
+    assert a == b
+
+
+def test_mixture_tails_thinner_than_inflated_normal():
+    """Two disagreeing inputs: the mixture keeps component tails; one inflated normal fattens them."""
+    import math
+    from strategies.weather_model import mixture_distribution
+    mix = mixture_distribution([(70.0, 2.0, 1), (74.0, 2.0, 1)])
+    inflated = high_distribution(72.0, math.sqrt(4 + 4))     # same variance: 2^2 + spread 2^2
+    far = Bracket(80, None)
+    assert bracket_probability(mix, far) < bracket_probability(inflated, far)
+    assert sum(mix.values()) == pytest.approx(1.0, abs=1e-12)

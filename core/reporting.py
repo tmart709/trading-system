@@ -49,7 +49,7 @@ def calibration_table(db: Database, since: datetime | None = None) -> dict:
     }
 
 
-def signal_accuracy(db: Database, mode: str = "paper") -> dict:
+def signal_accuracy(db: Database, mode: str = "paper", model_version: str | None = None) -> dict:
     """Every market-side the model ever flagged (first flag only), scored against the settled result.
 
     Groups: traded / suspect (edge too big, skipped) / skipped for another reason (thin book, fees, ...).
@@ -59,7 +59,8 @@ def signal_accuracy(db: Database, mode: str = "paper") -> dict:
         """SELECT s.venue, s.market_id, s.side, s.model_prob, s.market_price, s.fee_per_contract, s.acted,
                   s.details_json, s.ts, m.result
            FROM signals s JOIN markets m ON m.venue = s.venue AND m.market_id = s.market_id
-           WHERE s.mode = ? ORDER BY s.ts""", (mode,))
+           WHERE s.mode = ? AND (? IS NULL OR COALESCE(json_extract(s.details_json, '$.model_version'), 'v1') = ?)
+           ORDER BY s.ts""", (mode, model_version, model_version))
     first: dict[tuple, dict] = {}
     for r in rows:
         key = (r["venue"], r["market_id"], r["side"])
@@ -186,7 +187,7 @@ def daily_report(db: Database, md: MarketData, day: date, series_to_city: dict[s
         for k, (c, p, h) in cal["buckets"].items():
             lines.append(f"  predicted {k:>8}: n={c:5d}  avg {p:.3f}  happened {h:.3f}")
     acc = signal_accuracy(db, mode)
-    lines.append(f"Signal accuracy (every market-side the model flagged, all time; {acc['pending']} not settled yet):")
+    lines.append(f"Signal accuracy (every market-side the model flagged, all model versions; {acc['pending']} not settled yet):")
     if not acc["groups"]:
         lines.append("  no settled signals yet")
     for g in ("traded", "suspect", "skipped (other)"):
@@ -195,6 +196,11 @@ def daily_report(db: Database, md: MarketData, day: date, series_to_city: dict[s
             lines.append(f"  {g:16s} n={a['n']:4d}  won {a['actual_win_rate']:.1%}  model expected "
                          f"{a['model_expected_win_rate']:.1%}  price implied {a['price_implied_win_rate']:.1%}  "
                          f"P&L/contract {a['pnl_per_contract']:+.3f}")
+    for version in ("v1", "v2"):
+        g = signal_accuracy(db, mode, version)["groups"].get("traded")
+        if g:
+            lines.append(f"  model {version} bets: n={g['n']}  won {g['actual_win_rate']:.1%}  model expected "
+                         f"{g['model_expected_win_rate']:.1%}  P&L/contract {g['pnl_per_contract']:+.3f}")
     agree = settlement_agreement(db, series_to_city)
     lines.append(f"Settlement sources (Kalshi/Weather Company vs NWS CLI): {agree['mismatched']} of "
                  f"{agree['checked']} settled Kalshi brackets disagreed")

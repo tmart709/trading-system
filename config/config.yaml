@@ -32,20 +32,26 @@ strategies:
     max_entries_per_market_side: 1   # bet each bracket/side once (repeat buys add money at risk, not samples)
     min_edge: 0.05               # dollars per contract, after fees
     max_edge: 0.15               # edges above this are logged as "suspect" and NOT traded (likely model error)
-    # Forecast inputs averaged into the model's center. `deterministic` = GFS+ECMWF deterministic runs,
-    # bias-corrected from history. The others aren't historically calibrated yet (we record them from
-    # 2026-10-12 on); the GFS/ECMWF ensemble means get the same bias correction as the deterministic runs.
+    # Core of the model: a calibrated blend of the GFS+ECMWF deterministic average and NOAA's National
+    # Blend of Models. Its bias and typical error are fitted on the BLEND's own history (walk-forward
+    # test 2025-04..2026-10: log loss 2.326 vs 2.366 GFS+ECMWF alone; long shots 1.8% said vs 1.6% happened).
+    nbm_weight: 0.5
+    # Other inputs only nudge the center; they can't be calibrated until we've recorded a few months of them
+    # (recording since 2026-10-12). Ensemble means get the blend's bias correction.
     input_weights:
-      deterministic: 1.0
-      nws_point: 1.0
-      gfs_ensemble_mean: 1.0
-      ecmwf_ensemble_mean: 1.0
-    inflate_sigma_for_disagreement: true   # widen uncertainty when inputs disagree
+      calibrated_blend: 0.75
+      nws_point: 0.125
+      gfs_ensemble_mean: 0.0625
+      ecmwf_ensemble_mean: 0.0625
+    # Widening sigma when inputs disagree fattened the tails and overpriced long shots (2.3% said vs 1.6%
+    # happened in the same test), so it's off.
+    inflate_sigma_for_disagreement: false
     min_book_contracts: 5        # need at least this many contracts available at qualifying prices
     kelly_fraction: 0.10
     calibration_window_days: 30  # seasonal window (+/- days of year) for bias/sigma
-    use_observed_floor: true     # same-day: high observed so far is a hard floor
+    use_observed_floor: true     # same-day: high observed so far is a hard floor (low: a ceiling)
     same_day_cutoff_hour_lst: 12 # no same-day trades from this hour (local standard time) on
+    same_day_variables: [high]   # lows off same-day: a cold front can set a new low late in the evening
     min_minutes_to_close: 30
     prediction_log_minutes: 60   # how often every market's model probability is logged
   cross_venue_gap:

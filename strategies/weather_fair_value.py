@@ -16,7 +16,7 @@ from typing import Callable
 from core.alerts.notifier import Notifier
 from core.config import CityConfig, Config
 from core.data.calibration import load_samples
-from core.data.forecasts import DETERMINISTIC_MODELS, lst_date, standard_offset
+from core.data.forecasts import DETERMINISTIC_MODELS, NBM_MODEL, lst_date, standard_offset
 from core.db import Database, utcnow
 from core.execution.paper import PaperBroker
 from core.execution.portfolio import positions
@@ -32,6 +32,10 @@ from strategies.weather_model import (Calibration, bracket_probability, combine_
 log = logging.getLogger("strategy.weather")
 
 NAME = "weather_fair_value"
+# Bump when the model changes so results can be compared before/after (stored on every signal/prediction).
+#   v1 2026-10-12  GFS+ECMWF deterministic blend; NWS + ensemble means; sigma widened on disagreement
+#   v2 2026-10-13  calibrated GFS+ECMWF+NBM blend; other inputs nudge the center only; same-day lows off
+MODEL_VERSION = "v2"
 
 
 @dataclass
@@ -64,14 +68,30 @@ class WeatherFairValue:
         self._warned: set[str] = set()
 
     # ---------------- model ----------------
-    def _calibration(self, city: str, variable: str, lag: int, target: date) -> Calibration | None:
+    def _calibration(self, city: str, variable: str, lag: int, target: date,
+                     nbm_weight: float) -> Calibration | None:
+        """Bias/sigma fitted on the history of the exact blend used live: (1-w)*mean(GFS,ECMWF) + w*NBM."""
         today = date.today()
         if self._samples_day != today:
             self._samples, self._samples_day = {}, today
-        key = (city, variable, lag)
+        key = (city, variable, lag, nbm_weight)
         if key not in self._samples:
-            self._samples[key] = load_samples(self.db, city, lag, variable)
-        return fit_calibration(self._samples[key], target, self.p["calibration_window_days"])
+            glob = load_samples(self.db, city, lag, variable)
+            if nbm_weight:
+                nbm = {d: f for d, f, _ in load_samples(self.db, city, lag, variable, models=(NBM_MODEL,))}
+                self._samples[key] = [(d, (1 - nbm_weight) * f + nbm_weight * nbm[d], a)
+                                      for d, f, a in glob if d in nbm]
+            else:
+                self._samples[key] = glob
+        return fit_calibration(self._samples[key], target, self.p["calibration_window_days"],
+                               min_samples=30 if nbm_weight else 40)
+
+    def _latest_nbm(self, city: str, variable: str, target: date) -> tuple[float, str] | None:
+        rows = self.db.query(
+            """SELECT point_f, fetched_at FROM forecasts WHERE city=? AND source='open_meteo_forecast'
+               AND model=? AND variable=? AND target_date=? ORDER BY fetched_at DESC LIMIT 1""",
+            (city, NBM_MODEL, variable, target.isoformat()))
+        return (rows[0]["point_f"], rows[0]["fetched_at"]) if rows and rows[0]["point_f"] is not None else None
 
     def _latest_forecasts(self, city: str, variable: str, target: date) -> tuple[float, float, dict] | None:
         rows = self.db.query(
@@ -108,6 +128,8 @@ class WeatherFairValue:
         lag = lag_for(target, today_lst)
         if lag is None or lag > 3:
             return None
+        if target == today_lst and variable not in self.p.get("same_day_variables", ["high", "low"]):
+            return None
         if target == today_lst:
             # The model has no intraday "is the peak/trough over yet?" logic, so late in the day it would keep
             # assigning probability beyond the observed extreme. Don't trade same-day markets after the cutoff.
@@ -117,15 +139,21 @@ class WeatherFairValue:
         fc = self._latest_forecasts(city.code, variable, target)
         if not fc:
             return None
-        blend, age_min, inputs = fc
-        cal = self._calibration(city.code, variable, lag, target)
+        glob, age_min, inputs = fc
+        nbm = self._latest_nbm(city.code, variable, target)
+        w = float(self.p.get("nbm_weight", 0)) if nbm else 0.0   # no live NBM -> GFS+ECMWF alone, its own calibration
+        if nbm:
+            inputs["ncep_nbm"] = round(nbm[0], 2)
+            age_min = max(age_min, (datetime.now(timezone.utc) - datetime.fromisoformat(nbm[1])).total_seconds() / 60)
+        blend = (1 - w) * glob + w * nbm[0] if w else glob
+        cal = self._calibration(city.code, variable, lag, target, w)
         if not cal:
             return None
         bound = (self._observed_bound(city, variable, target)
                  if (self.p["use_observed_floor"] and target == today_lst) else None)
         others = self._other_inputs(city.code, variable, target)
         centers = {
-            "deterministic": blend + cal.bias,
+            "calibrated_blend": blend + cal.bias,
             "nws_point": others.get("nws_point"),
             # ensemble means are grid-point model output like the deterministic runs: same bias correction
             "gfs_ensemble_mean": others["gfs_ensemble_mean"] + cal.bias if "gfs_ensemble_mean" in others else None,
@@ -239,7 +267,7 @@ class WeatherFairValue:
             best_edge = prob_d - best.price - fee_fn(Decimal(100), best.price) / 100
             if best_edge < Decimal(str(self.p["min_edge"])):
                 continue
-            details = {"variable": cd.variable, "mu": round(cd.mu, 2), "sigma": round(cd.sigma, 2), "lag": cd.lag,
+            details = {"model_version": MODEL_VERSION, "variable": cd.variable, "mu": round(cd.mu, 2), "sigma": round(cd.sigma, 2), "lag": cd.lag,
                        "observed_bound": cd.floor,
                        "inputs": cd.inputs, "bracket": m["bracket"].label(), "target": cd.target.isoformat(),
                        "book_age_s": round(book_age, 1)}
@@ -310,6 +338,6 @@ class WeatherFairValue:
         self.db.conn.execute(
             "INSERT INTO model_predictions (ts, strategy, venue, market_id, model_prob, market_mid, details_json) VALUES (?,?,?,?,?,?,?)",
             (utcnow(), NAME, m["venue"], m["market_id"], p_yes, mid,
-             json.dumps({"variable": cd.variable, "mu": round(cd.mu, 2), "sigma": round(cd.sigma, 2), "lag": cd.lag,
+             json.dumps({"model_version": MODEL_VERSION, "variable": cd.variable, "mu": round(cd.mu, 2), "sigma": round(cd.sigma, 2), "lag": cd.lag,
                          "floor": cd.floor,
                          "centers": cd.inputs.get("centers")})))

@@ -12,7 +12,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from core.config import CityConfig, Config
-from core.data.forecasts import DETERMINISTIC_MODELS, WeatherSources
+from core.data.forecasts import DETERMINISTIC_MODELS, NBM_HISTORY_START, NBM_MODEL, WeatherSources
 from core.db import Database, utcnow
 from strategies.weather_model import fit_calibration, high_distribution
 
@@ -36,8 +36,8 @@ async def build_calibration_set(cfg: Config, db: Database, weather: WeatherSourc
                         upsert_actual(db, city.code, d, hi, lo)
                         n_act += 1
         n_fc = 0
-        for model in DETERMINISTIC_MODELS:
-            chunk_start = start
+        for model in (*DETERMINISTIC_MODELS, NBM_MODEL):
+            chunk_start = max(start, date.fromisoformat(NBM_HISTORY_START)) if model == NBM_MODEL else start
             while chunk_start <= end:
                 chunk_end = min(end, chunk_start + timedelta(days=180))
                 runs = await weather.previous_runs(city, model, chunk_start, chunk_end, LAGS)
@@ -64,15 +64,17 @@ def upsert_actual(db: Database, city: str, d: date, high: int, low: int | None) 
         "fetched_at=excluded.fetched_at", (city, d.isoformat(), high, low, utcnow()))
 
 
-def load_samples(db: Database, city: str, lag: int, variable: str = "high") -> list[tuple[date, float, int]]:
-    """(date, blended forecast, actual) where every deterministic model is present."""
+def load_samples(db: Database, city: str, lag: int, variable: str = "high",
+                 models: tuple[str, ...] = DETERMINISTIC_MODELS) -> list[tuple[date, float, int]]:
+    """(date, mean forecast of `models`, actual) for dates where every one of `models` is present."""
     actual_col = "a.high_f" if variable == "high" else "a.low_f"
+    marks = ",".join("?" * len(models))
     rows = db.query(
         f"""SELECT s.target_date, AVG(s.forecast_f) f, COUNT(*) n, {actual_col} AS actual
            FROM calibration_samples s JOIN cli_actuals a USING (city, target_date)
-           WHERE s.city=? AND s.variable=? AND s.lag_days=? AND {actual_col} IS NOT NULL
+           WHERE s.city=? AND s.variable=? AND s.lag_days=? AND s.model IN ({marks}) AND {actual_col} IS NOT NULL
            GROUP BY s.target_date HAVING n = ? ORDER BY s.target_date""",
-        (city, variable, lag, len(DETERMINISTIC_MODELS)))
+        (city, variable, lag, *models, len(models)))
     return [(date.fromisoformat(r["target_date"]), r["f"], r["actual"]) for r in rows]
 
 

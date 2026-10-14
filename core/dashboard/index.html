@@ -397,8 +397,9 @@ function renderCities(s) {
     selectedDate = btn.dataset.date; store.set("wb.date", selectedDate); renderCities(state);
   });
   const held = new Set(s.positions.map((p) => p.city + "|" + p.variable + "|" + p.date + "|" + p.bracket));
-  const inputNames = { deterministic: "Models", nws_point: "NWS", gfs_ensemble_mean: "GFS ens", ecmwf_ensemble_mean: "ECMWF ens" };
-  const inputTips = { deterministic: "GFS + ECMWF deterministic runs, bias-corrected from 2.5 years of history",
+  const inputNames = { calibrated_blend: "Blend", deterministic: "Models", nws_point: "NWS", gfs_ensemble_mean: "GFS ens", ecmwf_ensemble_mean: "ECMWF ens" };
+  const inputTips = { calibrated_blend: "Calibrated core: GFS + ECMWF + National Blend of Models, bias-corrected and sized from its own history (75% of the estimate)",
+    deterministic: "GFS + ECMWF deterministic runs, bias-corrected from 2.5 years of history",
     nws_point: "National Weather Service point forecast", gfs_ensemble_mean: "Average of 31 GFS ensemble members",
     ecmwf_ensemble_mean: "Average of 51 ECMWF ensemble members" };
   $("cities").innerHTML = priced.filter((c) => c.date === selectedDate).map((c) => {

@@ -52,29 +52,43 @@ def _norm_cdf(x: float, mu: float, sigma: float) -> float:
     return 0.5 * (1 + math.erf((x - mu) / (sigma * math.sqrt(2))))
 
 
-def high_distribution(mu: float, sigma: float, floor: int | None = None, ceiling: int | None = None,
-                      span: float = 6.0) -> dict[int, float]:
-    """Integer-degree pmf for a daily high or low.
+def mixture_distribution(components: list[tuple[float, float, float]], floor: int | None = None,
+                         ceiling: int | None = None, span: float = 6.0) -> dict[int, float]:
+    """Integer-degree pmf from a weighted mixture of normals [(mu, sigma, weight), ...].
+
+    Each forecast input contributes its own bell curve with its own calibrated width. When inputs
+    disagree the mixture is wider in the middle, but its far tails stay those of the components,
+    unlike one normal with an inflated sigma, which fattens the tails and overprices long shots.
 
     floor:   same-day high already observed -> the high can't end lower (H >= floor).
     ceiling: same-day low already observed  -> the low can't end higher (L <= ceiling).
-    Mass on the impossible side is dropped (truncation) and the rest renormalized.
     """
-    lo, hi = math.floor(mu - span * sigma), math.ceil(mu + span * sigma)
+    comps = [(m, s, w) for m, s, w in components if w > 0]
+    if not comps:
+        raise ValueError("no components")
+    wsum = sum(w for _, _, w in comps)
+    lo = math.floor(min(m - span * s for m, s, _ in comps))
+    hi = math.ceil(max(m + span * s for m, s, _ in comps))
     if floor is not None:
         lo, hi = max(lo, floor), max(hi, floor)
     if ceiling is not None:
         lo, hi = min(lo, ceiling), min(hi, ceiling)
-    pmf = {k: _norm_cdf(k + 0.5, mu, sigma) - _norm_cdf(k - 0.5, mu, sigma) for k in range(lo, hi + 1)}
-    # Fold the open tails into the edge bins, except on a truncated side.
+    cdf = lambda x: sum(w * _norm_cdf(x, m, s) for m, s, w in comps) / wsum  # noqa: E731
+    pmf = {k: cdf(k + 0.5) - cdf(k - 0.5) for k in range(lo, hi + 1)}
     if floor is None:
-        pmf[lo] += _norm_cdf(lo - 0.5, mu, sigma)
+        pmf[lo] += cdf(lo - 0.5)
     if ceiling is None:
-        pmf[hi] += 1 - _norm_cdf(hi + 0.5, mu, sigma)
+        pmf[hi] += 1 - cdf(hi + 0.5)
     total = sum(pmf.values())
     if total <= 1e-12:   # observation far beyond the forecast: it dominates
         return {floor if floor is not None else ceiling: 1.0}
     return {k: v / total for k, v in pmf.items()}
+
+
+def high_distribution(mu: float, sigma: float, floor: int | None = None, ceiling: int | None = None,
+                      span: float = 6.0) -> dict[int, float]:
+    """Single-normal special case of mixture_distribution."""
+    return mixture_distribution([(mu, sigma, 1.0)], floor, ceiling, span)
 
 
 def bracket_probability(pmf: dict[int, float], bracket: Bracket) -> float:

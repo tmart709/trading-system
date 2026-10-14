@@ -28,6 +28,9 @@ OPEN_METEO_PREVIOUS_RUNS = "https://previous-runs-api.open-meteo.com/v1/forecast
 # Deterministic models used by the fair-value model. They're the inputs the calibration is fitted on
 # (same models via the previous-runs archive), so live and historical inputs match exactly.
 DETERMINISTIC_MODELS = ("gfs_seamless", "ecmwf_ifs025")
+# NOAA's National Blend of Models: calibrated separately (its archive on Open-Meteo starts 2024-10-15).
+NBM_MODEL = "ncep_nbm_conus"
+NBM_HISTORY_START = "2024-10-15"
 
 
 def c_to_f(c: float | None) -> float | None:
@@ -187,7 +190,7 @@ class WeatherSources:
     async def deterministic_forecasts(self, city: CityConfig, days: int = 3) -> list[dict]:
         rows: list[dict] = []
         issued = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        for model in DETERMINISTIC_MODELS:
+        for model in (*DETERMINISTIC_MODELS, NBM_MODEL):
             try:
                 d = await self._h.get(OPEN_METEO_FORECAST, {
                     "latitude": city.lat, "longitude": city.lon, "hourly": "temperature_2m",
