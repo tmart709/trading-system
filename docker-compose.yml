@@ -1,0 +1,14 @@
+services:
+  recorder:
+    build: .
+    command: ["record"]
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./db:/app/db                 # SQLite lives on the host; back this directory up
+      - ./config:/app/config:ro
+      - ./secrets:/app/secrets:ro    # Kalshi private key files (only needed for demo/live)
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }

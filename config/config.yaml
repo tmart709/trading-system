@@ -1,0 +1,331 @@
+# Trading system configuration.
+# Modes, in order of rollout: record -> paper -> demo -> live.
+#   record: collect market data + forecasts only
+#   paper:  strategies run on live prices, hypothetical fills only
+#   demo:   real orders on a venue's sandbox (Kalshi only; Polymarket US has no sandbox)
+#   live:   real money. Also requires live_enabled: true on the venue AND an interactive confirmation.
+
+db_path: db/trading.sqlite
+
+venues:
+  kalshi:
+    mode: paper
+    live_enabled: false          # do not flip without reading README "Going live"
+    # Basic tier read budget = 200 tokens/s at 10 tokens/request = 20 req/s. Stay well under it:
+    # at 8 req/s, refreshing 48 weather series right after a restart drew a few 429s (2026-10-12).
+    max_requests_per_second: 5
+  polymarket_us:
+    mode: paper                  # no sandbox exists, so the path is record -> paper -> live
+    live_enabled: false
+    # Retail API (authenticated) documents 25 req/s per IP. The public gateway is undocumented; measured
+    # 2026-10-12: listings tolerate ~2 req/s, but /book and /bbo allow only ~5 per 10s, then 429 for 10s.
+    max_requests_per_second: 2
+    book_requests_per_second: 0.3
+
+# A strategy trades a venue at the LOWER of (strategy mode, venue mode): record < paper < demo < live.
+# So paper trading needs both the strategy and the venue at `paper` (or higher).
+strategies:
+  weather_fair_value:
+    mode: paper
+    cities: all                  # or a list of codes, e.g. [NYC, CHI]
+    variables: [high, low]       # daily high and/or daily low markets
+    max_entries_per_market_side: 1   # bet each bracket/side once (repeat buys add money at risk, not samples)
+    min_edge: 0.05               # dollars per contract, after fees
+    max_edge: 0.15               # edges above this are logged as "suspect" and NOT traded (likely model error)
+    # Forecast inputs averaged into the model's center. `deterministic` = GFS+ECMWF deterministic runs,
+    # bias-corrected from history. The others aren't historically calibrated yet (we record them from
+    # 2026-10-12 on); the GFS/ECMWF ensemble means get the same bias correction as the deterministic runs.
+    input_weights:
+      deterministic: 1.0
+      nws_point: 1.0
+      gfs_ensemble_mean: 1.0
+      ecmwf_ensemble_mean: 1.0
+    inflate_sigma_for_disagreement: true   # widen uncertainty when inputs disagree
+    min_book_contracts: 5        # need at least this many contracts available at qualifying prices
+    kelly_fraction: 0.10
+    calibration_window_days: 30  # seasonal window (+/- days of year) for bias/sigma
+    use_observed_floor: true     # same-day: high observed so far is a hard floor
+    same_day_cutoff_hour_lst: 12 # no same-day trades from this hour (local standard time) on
+    min_minutes_to_close: 30
+    prediction_log_minutes: 60   # how often every market's model probability is logged
+  cross_venue_gap:
+    mode: record                 # not built yet; paper only until approved
+
+# Risk limits (paper defaults; live will get its own, much lower, limits). Dollar amounts are cost basis.
+risk:
+  # Paper only: ignore the exposure caps and the daily loss halt below, to build a bigger sample.
+  # Kill switch, stale-data and order sanity checks still apply. Has no effect on demo/live.
+  paper_uncapped: true
+  paper_bankroll_usd: 1000
+  max_position_per_market_usd: 50
+  max_exposure_per_event_usd: 100      # one city-day; brackets in an event are mutually exclusive
+  max_exposure_per_venue_usd: 300
+  max_total_exposure_usd: 500
+  max_new_exposure_per_day_usd: 250
+  daily_loss_limit_usd: 100            # realized + mark-to-market; hitting it halts trading for the day
+  max_contracts_per_order: 200
+  min_price: 0.02                      # never buy below/above these (thin edges, fee rounding dominates)
+  max_price: 0.98
+  max_book_age_seconds: 150
+  max_forecast_age_minutes: 180
+
+recorder:
+  snapshot_interval_seconds: 60
+  forecast_interval_seconds: 1800
+  market_refresh_interval_seconds: 600   # re-list markets/rules (books are polled every snapshot)
+
+# Every US city Kalshi lists daily-high/low temperature markets for (verified 2026-10-12: 24 stations).
+# `kalshi_series` = daily-high series, `kalshi_low_series` = daily-low series,
+# `polymarket_event_prefix` = Polymarket US daily-high event slug prefix (only 5 cities are listed there).
+# Station/coordinates/timezone come from api.weather.gov for the CLI station named in the market rules.
+weather:
+  nws_user_agent_env: NWS_USER_AGENT
+  ensemble_models: [gfs_seamless, ecmwf_ifs025]   # icon_seamless currently errors on Open-Meteo
+  cities:
+    ATL:
+      name: Atlanta
+      kalshi_series: KXHIGHTATL
+      kalshi_low_series: KXLOWTATL
+      polymarket_event_prefix: null
+      station: KATL
+      cli_code: CLIATL
+      lat: 33.6403
+      lon: -84.4269
+      tz: America/New_York
+    AUS:
+      name: Austin
+      kalshi_series: KXHIGHAUS
+      kalshi_low_series: KXLOWTAUS
+      polymarket_event_prefix: null
+      station: KAUS
+      cli_code: CLIAUS
+      lat: 30.183
+      lon: -97.6799
+      tz: America/Chicago
+    BOS:
+      name: Boston
+      kalshi_series: KXHIGHTBOS
+      kalshi_low_series: KXLOWTBOS
+      polymarket_event_prefix: null
+      station: KBOS
+      cli_code: CLIBOS
+      lat: 42.3606
+      lon: -71.0106
+      tz: America/New_York
+    CHI:
+      name: Chicago
+      kalshi_series: KXHIGHCHI
+      kalshi_low_series: KXLOWTCHI
+      polymarket_event_prefix: temp-mdwhigh
+      station: KMDW
+      cli_code: CLIMDW
+      lat: 41.7842
+      lon: -87.7553
+      tz: America/Chicago
+    DCA:
+      name: Washington DC
+      kalshi_series: KXHIGHTDC
+      kalshi_low_series: KXLOWTDC
+      polymarket_event_prefix: null
+      station: KDCA
+      cli_code: CLIDCA
+      lat: 38.8483
+      lon: -77.0342
+      tz: America/New_York
+    DEN:
+      name: Denver
+      kalshi_series: KXHIGHDEN
+      kalshi_low_series: KXLOWTDEN
+      polymarket_event_prefix: null
+      station: KDEN
+      cli_code: CLIDEN
+      lat: 39.8466
+      lon: -104.6562
+      tz: America/Denver
+    DFW:
+      name: Dallas
+      kalshi_series: KXHIGHTDAL
+      kalshi_low_series: KXLOWTDAL
+      polymarket_event_prefix: null
+      station: KDFW
+      cli_code: CLIDFW
+      lat: 32.8974
+      lon: -97.022
+      tz: America/Chicago
+    EWR:
+      name: Newark
+      kalshi_series: KXHIGHTEWR
+      kalshi_low_series: KXLOWTEWR
+      polymarket_event_prefix: null
+      station: KEWR
+      cli_code: CLIEWR
+      lat: 40.6825
+      lon: -74.1694
+      tz: America/New_York
+    HOU:
+      name: Houston
+      kalshi_series: KXHIGHTHOU
+      kalshi_low_series: KXLOWTHOU
+      polymarket_event_prefix: null
+      station: KHOU
+      cli_code: CLIHOU
+      lat: 29.6375
+      lon: -95.2825
+      tz: America/Chicago
+    LAS:
+      name: Las Vegas
+      kalshi_series: KXHIGHTLV
+      kalshi_low_series: KXLOWTLV
+      polymarket_event_prefix: null
+      station: KLAS
+      cli_code: CLILAS
+      lat: 36.0719
+      lon: -115.1634
+      tz: America/Los_Angeles
+    LAX:
+      name: Los Angeles
+      kalshi_series: KXHIGHLAX
+      kalshi_low_series: KXLOWTLAX
+      polymarket_event_prefix: temp-laxhigh
+      station: KLAX
+      cli_code: CLILAX
+      lat: 33.9381
+      lon: -118.3889
+      tz: America/Los_Angeles
+    MIA:
+      name: Miami
+      kalshi_series: KXHIGHMIA
+      kalshi_low_series: KXLOWTMIA
+      polymarket_event_prefix: temp-miahigh
+      station: KMIA
+      cli_code: CLIMIA
+      lat: 25.7906
+      lon: -80.3164
+      tz: America/New_York
+    MSP:
+      name: Minneapolis
+      kalshi_series: KXHIGHTMIN
+      kalshi_low_series: KXLOWTMIN
+      polymarket_event_prefix: null
+      station: KMSP
+      cli_code: CLIMSP
+      lat: 44.8831
+      lon: -93.2289
+      tz: America/Chicago
+    MSY:
+      name: New Orleans
+      kalshi_series: KXHIGHTNOLA
+      kalshi_low_series: KXLOWTNOLA
+      polymarket_event_prefix: null
+      station: KMSY
+      cli_code: CLIMSY
+      lat: 29.9928
+      lon: -90.2508
+      tz: America/Chicago
+    NYC:
+      name: New York City
+      kalshi_series: KXHIGHNY
+      kalshi_low_series: KXLOWTNYC
+      polymarket_event_prefix: temp-nychigh
+      station: KNYC
+      cli_code: CLINYC
+      lat: 40.7833
+      lon: -73.9667
+      tz: America/New_York
+    OKC:
+      name: Oklahoma City
+      kalshi_series: KXHIGHTOKC
+      kalshi_low_series: KXLOWTOKC
+      polymarket_event_prefix: null
+      station: KOKC
+      cli_code: CLIOKC
+      lat: 35.3886
+      lon: -97.6003
+      tz: America/Chicago
+    PHL:
+      name: Philadelphia
+      kalshi_series: KXHIGHPHIL
+      kalshi_low_series: KXLOWTPHIL
+      polymarket_event_prefix: null
+      station: KPHL
+      cli_code: CLIPHL
+      lat: 39.8733
+      lon: -75.2268
+      tz: America/New_York
+    PHX:
+      name: Phoenix
+      kalshi_series: KXHIGHTPHX
+      kalshi_low_series: KXLOWTPHX
+      polymarket_event_prefix: null
+      station: KPHX
+      cli_code: CLIPHX
+      lat: 33.4278
+      lon: -112.0035
+      tz: America/Phoenix
+    SAN:
+      name: San Diego
+      kalshi_series: KXHIGHTSAN
+      kalshi_low_series: KXLOWTSAN
+      polymarket_event_prefix: null
+      station: KSAN
+      cli_code: CLISAN
+      lat: 32.7336
+      lon: -117.1831
+      tz: America/Los_Angeles
+    SAT:
+      name: San Antonio
+      kalshi_series: KXHIGHTSATX
+      kalshi_low_series: KXLOWTSATX
+      polymarket_event_prefix: null
+      station: KSAT
+      cli_code: CLISAT
+      lat: 29.5328
+      lon: -98.4636
+      tz: America/Chicago
+    SDF:
+      name: Louisville
+      kalshi_series: KXHIGHTSDF
+      kalshi_low_series: KXLOWTSDF
+      polymarket_event_prefix: null
+      station: KSDF
+      cli_code: CLISDF
+      lat: 38.1741
+      lon: -85.7365
+      tz: America/Kentucky/Louisville
+    SEA:
+      name: Seattle
+      kalshi_series: KXHIGHTSEA
+      kalshi_low_series: KXLOWTSEA
+      polymarket_event_prefix: null
+      station: KSEA
+      cli_code: CLISEA
+      lat: 47.4447
+      lon: -122.3136
+      tz: America/Los_Angeles
+    SFO:
+      name: San Francisco
+      kalshi_series: KXHIGHTSFO
+      kalshi_low_series: KXLOWTSFO
+      polymarket_event_prefix: temp-sfohigh
+      station: KSFO
+      cli_code: CLISFO
+      lat: 37.6196
+      lon: -122.3656
+      tz: America/Los_Angeles
+    TTN:
+      name: Trenton
+      kalshi_series: KXHIGHTTTN
+      kalshi_low_series: KXLOWTTTN
+      polymarket_event_prefix: null
+      station: KTTN
+      cli_code: CLITTN
+      lat: 40.2764
+      lon: -74.8164
+      tz: America/New_York
+
+reports:
+  daily_report_hour_local: 9          # America/New_York; after overnight CLI settlements
+  timezone: America/New_York
+
+alerts:
+  backend: stdout   # stdout | telegram | discord  (stdout is always also on)

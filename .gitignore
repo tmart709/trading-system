@@ -1,0 +1,12 @@
+.env
+*.pem
+*.key
+secrets/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+db/*.sqlite
+db/*.sqlite-*
+logs/
+.DS_Store

@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather Bot Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2;
+  --bg-glow: rgba(42, 120, 214, 0.08);
+  --surface: #ffffff;
+  --surface-2: #f6f6f4;
+  --surface-3: #eeeeeb;
+  --border: rgba(11, 11, 11, 0.08);
+  --border-strong: rgba(11, 11, 11, 0.14);
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --text-3: #8a8984;
+  --series-1: #2a78d6;      /* model */
+  --series-2: #eb6834;      /* market */
+  --series-2-soft: rgba(235, 104, 52, 0.28);
+  --good: #0ca30c;
+  --good-text: #0a7d0a;
+  --good-soft: rgba(12, 163, 12, 0.10);
+  --warning: #fab219;
+  --warning-soft: rgba(250, 178, 25, 0.14);
+  --critical: #d03b3b;
+  --critical-soft: rgba(208, 59, 59, 0.10);
+  --track: #ecebe7;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+  --radius: 14px;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0d0d0c;
+    --bg-glow: rgba(57, 135, 229, 0.10);
+    --surface: #171716;
+    --surface-2: #1d1d1c;
+    --surface-3: #252523;
+    --border: rgba(255, 255, 255, 0.07);
+    --border-strong: rgba(255, 255, 255, 0.13);
+    --text: #f5f5f3;
+    --text-2: #c3c2b7;
+    --text-3: #85847d;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-2-soft: rgba(217, 89, 38, 0.34);
+    --good-text: #4cc94c;
+    --good-soft: rgba(12, 163, 12, 0.16);
+    --warning-soft: rgba(250, 178, 25, 0.14);
+    --critical-soft: rgba(208, 59, 59, 0.16);
+    --track: #262624;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d0d0c; --bg-glow: rgba(57,135,229,.10); --surface: #171716; --surface-2: #1d1d1c; --surface-3: #252523;
+  --border: rgba(255,255,255,.07); --border-strong: rgba(255,255,255,.13);
+  --text: #f5f5f3; --text-2: #c3c2b7; --text-3: #85847d;
+  --series-1: #3987e5; --series-2: #d95926; --series-2-soft: rgba(217,89,38,.34);
+  --good-text: #4cc94c; --good-soft: rgba(12,163,12,.16); --critical-soft: rgba(208,59,59,.16);
+  --track: #262624; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: radial-gradient(1200px 500px at 15% -10%, var(--bg-glow), transparent 60%), var(--bg);
+  background-attachment: fixed;
+  color: var(--text);
+  font: 14px/1.5 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+.num, .mono { font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 0 16px 56px; }
+
+/* ---------- top bar ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 5;
+  backdrop-filter: saturate(160%) blur(14px); -webkit-backdrop-filter: saturate(160%) blur(14px);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  border-bottom: 1px solid var(--border);
+  margin: 0 -16px 22px; padding: 12px 16px;
+}
+.topbar-inner { max-width: 1320px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; justify-content: space-between; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.logo {
+  width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex: none;
+  background: linear-gradient(135deg, var(--series-1), #7b5be6); color: #fff; font-size: 16px;
+  box-shadow: 0 4px 14px rgba(57, 135, 229, .35);
+}
+.brand h1 { font-size: 16px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+.brand p { margin: 0; font-size: 12px; color: var(--text-3); }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; color: var(--text-2); background: var(--surface); border: 1px solid var(--border);
+  white-space: nowrap; cursor: default;
+}
+.badge .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.badge.live .dot { background: var(--good); box-shadow: 0 0 0 0 rgba(12,163,12,.6); animation: pulse 2s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(12,163,12,.55); } 70% { box-shadow: 0 0 0 7px rgba(12,163,12,0); } 100% { box-shadow: 0 0 0 0 rgba(12,163,12,0); } }
+@media (prefers-reduced-motion: reduce) { .badge.live .dot { animation: none; } }
+.badge.paper { background: var(--warning-soft); border-color: transparent; color: var(--text); }
+
+/* ---------- KPIs ---------- */
+.kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); min-width: 0; }
+.kpi .label { color: var(--text-3); font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.kpi .value { font-size: 26px; font-weight: 650; letter-spacing: -0.03em; margin-top: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .note { color: var(--text-3); font-size: 11.5px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.info { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border-strong); font-size: 9px; color: var(--text-3); cursor: help; }
+
+/* ---------- sections ---------- */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 18px; box-shadow: var(--shadow); min-width: 0; }
+.sec-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.sec-head h2 { font-size: 15px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+.sec-head .meta { color: var(--text-3); font-size: 12.5px; margin-top: 1px; }
+.two { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 960px) { .two { grid-template-columns: 1fr; } }
+h3 { font-size: 13px; font-weight: 600; margin: 18px 0 8px; color: var(--text-2); }
+
+/* segmented controls */
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface-3); border-radius: 10px; flex-wrap: wrap; }
+.seg button {
+  border: 0; background: transparent; color: var(--text-2); font: inherit; font-size: 12.5px; font-weight: 500;
+  padding: 5px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+}
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#citySearch {
+  height: 32px; width: 170px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); font: inherit; font-size: 12.5px;
+}
+#citySearch:focus { outline: 2px solid var(--series-1); outline-offset: 1px; }
+.vtag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 1px 6px; border-radius: 5px; margin-left: 6px; vertical-align: 1px; }
+.vtag.high { background: rgba(235, 104, 52, .16); color: var(--text); }
+.vtag.low { background: rgba(42, 120, 214, .16); color: var(--text); }
+
+/* legend */
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--text-2); }
+.legend .sw-bar { display: inline-block; width: 18px; height: 8px; border-radius: 4px; background: var(--series-2-soft); border-right: 3px solid var(--series-2); vertical-align: 0; margin-right: 6px; }
+.legend .sw-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--series-1); box-shadow: 0 0 0 2px var(--surface); vertical-align: -1px; margin-right: 6px; }
+
+/* ---------- city cards ---------- */
+.cities { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 370px), 1fr)); gap: 14px; }
+.city { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; min-width: 0; }
+.city-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.city-name { font-size: 14px; font-weight: 600; }
+.city-sub { font-size: 11.5px; color: var(--text-3); }
+.city-temp { text-align: right; }
+.city-temp .t { font-size: 26px; font-weight: 650; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.city-temp .pm { font-size: 12px; color: var(--text-3); font-weight: 500; margin-left: 2px; }
+.inputs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0 10px; }
+.inp { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 5px 7px; min-width: 0; }
+.inp .k { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inp .v { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.brow { display: grid; grid-template-columns: 62px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 5px 4px; border-radius: 8px; }
+.brow:hover { background: var(--surface-3); }
+.brow .lbl { font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.brow .lbl.held { color: var(--text); font-weight: 650; }
+.brow .lbl.held::after { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--text); margin-left: 5px; vertical-align: 2px; }
+.track { position: relative; height: 10px; background: var(--track); border-radius: 5px; }
+.track .mkt { position: absolute; left: 0; top: 0; bottom: 0; background: var(--series-2-soft); border-right: 3px solid var(--series-2); border-radius: 5px; min-width: 3px; }
+.track .mdl { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--series-1); box-shadow: 0 0 0 2px var(--surface-2); }
+.brow .vals { display: grid; grid-template-columns: 32px 30px 34px; justify-items: end; align-items: center; gap: 4px; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.edge { font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: 6px; background: var(--surface-3); color: var(--text-2); font-family: var(--mono); }
+.edge.big { background: var(--text); color: var(--surface); }
+
+/* ---------- tables ---------- */
+.table-wrap { overflow: auto; max-height: 520px; border: 1px solid var(--border); border-radius: 10px; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th {
+  position: sticky; top: 0; z-index: 1; background: var(--surface-2); text-align: left; color: var(--text-3);
+  font-weight: 500; font-size: 11.5px; padding: 9px 12px; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+td { padding: 9px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: var(--surface-2); }
+td.num, th.num { text-align: right; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--text); }
+th .arrow { font-size: 9px; margin-left: 4px; color: var(--text); }
+.vb { display: inline-flex; align-items: center; gap: 6px; }
+.vb i { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; font-style: normal; font-size: 9.5px; font-weight: 700; color: #fff; }
+.vb i.k { background: #1a8f6f; }
+.vb i.p { background: #2e5bd9; }
+.side { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; padding: 2px 7px; border-radius: 6px; background: var(--surface-3); color: var(--text); }
+.pos { color: var(--good-text); }
+.neg { color: var(--critical); }
+.muted { color: var(--text-3); }
+.result-won { color: var(--good-text); font-weight: 600; }
+.result-lost { color: var(--critical); font-weight: 600; }
+.empty { color: var(--text-3); font-size: 13px; padding: 22px 12px; text-align: center; white-space: normal; }
+
+/* ---------- accuracy ---------- */
+.acc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 560px) { .acc-grid { grid-template-columns: 1fr; } }
+.acc { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.acc .k { font-size: 11.5px; color: var(--text-3); font-weight: 500; }
+.acc .big { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; margin: 2px 0; }
+.acc .row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-2); }
+.placeholder { border: 1px dashed var(--border-strong); border-radius: 10px; padding: 22px 16px; text-align: center; color: var(--text-3); font-size: 13px; }
+
+/* ---------- feed ---------- */
+.feed { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow: auto; }
+.feed li { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: start; padding: 9px 2px; border-bottom: 1px solid var(--border); }
+.feed li:last-child { border-bottom: 0; }
+.feed .ic { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 11px; }
+.feed .ic.bet { background: var(--good-soft); color: var(--good-text); }
+.feed .ic.skip { background: var(--warning-soft); color: var(--text); }
+.feed .txt { font-size: 12.5px; }
+.feed .det { font-size: 11.5px; color: var(--text-3); }
+.feed .t { font-size: 11.5px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+#tooltip {
+  position: fixed; pointer-events: none; z-index: 20; max-width: 280px;
+  background: var(--text); color: var(--surface); font-size: 12px; line-height: 1.45;
+  padding: 8px 10px; border-radius: 8px; opacity: 0; transition: opacity .12s; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+svg text { fill: var(--text-3); font-size: 11px; font-family: Inter, sans-serif; }
+.foot { color: var(--text-3); font-size: 12px; text-align: center; margin-top: 8px; }
+.err { color: var(--critical); }
+a { color: var(--series-1); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">☀</div>
+        <div><h1>Weather Bot</h1><p>Kalshi + Polymarket US · daily high temperature</p></div>
+      </div>
+      <div class="badges" id="badges"></div>
+    </div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <section class="card">
+    <div class="sec-head">
+      <div>
+        <h2>Model vs market</h2>
+        <div class="meta">Bar = market price · dot = model probability · the gap is the edge</div>
+      </div>
+      <div class="controls">
+        <input id="citySearch" type="search" placeholder="Filter cities…" aria-label="Filter cities">
+        <div class="seg" id="varSeg" role="group" aria-label="Market type">
+          <button data-var="high">Highs</button><button data-var="low">Lows</button>
+        </div>
+        <div class="seg" id="dateTabs" role="group" aria-label="Date"></div>
+      </div>
+    </div>
+    <div class="legend" style="margin:-4px 0 14px">
+      <span><span class="sw-bar"></span>Market price (mid, both exchanges)</span>
+      <span><span class="sw-dot"></span>Model probability</span>
+      <span><b style="color:var(--text)">Bold ●</b> = bot holds a bet</span>
+    </div>
+    <div class="cities" id="cities"></div>
+  </section>
+
+  <section class="card">
+    <div class="sec-head">
+      <div><h2>Open bets</h2><div class="meta" id="posSub"></div></div>
+      <div class="seg" id="venueSeg" role="group" aria-label="Exchange filter (bets and activity)">
+        <button data-venue="all">All</button>
+        <button data-venue="kalshi">Kalshi</button>
+        <button data-venue="polymarket_us">Polymarket US</button>
+      </div>
+    </div>
+    <div class="table-wrap"><table id="positions"></table></div>
+  </section>
+
+  <div class="two">
+    <section class="card">
+      <div class="sec-head"><div><h2>Accuracy</h2>
+        <div class="meta">Every bracket the model flagged, scored after it settles</div></div></div>
+      <div id="accuracy"></div>
+      <h3>Calibration <span class="info" data-tip="All hourly model predictions vs what happened. When the model says 30%, it should happen about 30% of the time. Brier score: lower is better.">i</span></h3>
+      <div id="calibration"></div>
+    </section>
+    <section class="card">
+      <div class="sec-head"><div><h2>Realized P&amp;L</h2><div class="meta">Cumulative, settled bets</div></div></div>
+      <div id="pnlChart"></div>
+      <h3>Activity</h3>
+      <ul class="feed" id="feed"></ul>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="sec-head"><div><h2>Settled bets</h2><div class="meta">Filtered by the exchange switch above</div></div></div>
+    <div class="table-wrap"><table id="settled"></table></div>
+  </section>
+  <p class="foot" id="updated"></p>
+</div>
+<div id="tooltip" role="tooltip"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const pct = (x, d = 0) => x == null ? "–" : (x * 100).toFixed(d) + "%";
+const usd = (x) => x == null ? "–" : (x < 0 ? "−$" : "$") + Math.abs(x).toFixed(2);
+const signed = (x) => x == null ? "–" : (x > 0 ? "+" : x < 0 ? "−" : "") + "$" + Math.abs(x).toFixed(2);
+const cls = (x) => x == null ? "" : x > 0.004 ? "pos" : x < -0.004 ? "neg" : "";
+const venueName = (v) => v === "kalshi" ? "Kalshi" : "Polymarket US";
+const venueBadge = (v) => `<span class="vb"><i class="${v === "kalshi" ? "k" : "p"}">${v === "kalshi" ? "K" : "PM"}</i>${venueName(v)}</span>`;
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ago = (s) => s == null ? "never" : s < 90 ? `${Math.round(s)}s ago` : s < 5400 ? `${Math.round(s / 60)}m ago` : `${(s / 3600).toFixed(1)}h ago`;
+const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const dayLabel = (d) => new Date(d + "T12:00:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } },
+                set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+let state = null;
+let selectedDate = store.get("wb.date", null);
+let venueFilter = store.get("wb.venue", "all");
+let varFilter = store.get("wb.var", "high");
+let citySearch = "";
+const sorts = { positions: { key: "date", dir: 1 }, settled: { key: "date", dir: -1 } };
+try { Object.assign(sorts, JSON.parse(store.get("wb.sorts", "{}"))); } catch (e) {}
+const byVenue = (rows) => venueFilter === "all" ? rows : rows.filter((r) => r.venue === venueFilter);
+
+/* tooltip */
+const tip = $("tooltip");
+document.addEventListener("mousemove", (e) => {
+  const t = e.target.closest("[data-tip]");
+  if (!t) { tip.style.opacity = 0; return; }
+  tip.innerHTML = t.dataset.tip;
+  tip.style.opacity = 1;
+  tip.style.left = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 10) + "px";
+  tip.style.top = Math.min(e.clientY + 16, window.innerHeight - tip.offsetHeight - 10) + "px";
+});
+
+/* header */
+function renderBadges(s) {
+  const b = s.bot, out = [];
+  out.push(b.running
+    ? `<span class="badge live" data-tip="Prices refresh every minute. Last snapshot ${ago(b.last_snapshot_age_s)}."><span class="dot"></span>Live · ${ago(b.last_snapshot_age_s)}</span>`
+    : `<span class="badge" data-tip="No new prices for a while: is the bot tab running?"><span class="dot" style="background:var(--critical)"></span>Bot stopped · ${ago(b.last_snapshot_age_s)}</span>`);
+  out.push(`<span class="badge paper" data-tip="Simulated trades only. No real orders are placed.${b.uncapped ? " Exposure caps are off to build a bigger sample." : ""}">📄 Paper${b.uncapped ? " · uncapped" : ""}</span>`);
+  out.push(`<span class="badge" data-tip="Polymarket US prices: ${b.polymarket_feed}"><span class="dot" style="background:${b.polymarket_feed.startsWith("live") ? "var(--good)" : "var(--warning)"}"></span>Polymarket ${b.polymarket_feed.startsWith("live") ? "live" : "polling"}</span>`);
+  out.push(b.kill_switch
+    ? `<span class="badge" style="background:var(--critical-soft);color:var(--critical)" data-tip="All new orders are blocked. Run: cli.py unkill">⚠ Kill switch ON</span>`
+    : `<span class="badge" data-tip="Emergency stop is off. Run cli.py kill to block all orders."><span class="dot" style="background:var(--good)"></span>Kill switch off</span>`);
+  out.push(`<span class="badge" data-tip="${esc(b.cities.join(", "))}">${b.cities.length} cities · ${b.variables.map((v) => v === "high" ? "highs" : "lows").join(" + ")}</span>`);
+  $("badges").innerHTML = out.join("");
+}
+
+function renderKpis(s) {
+  const k = s.kpis;
+  const tile = (label, value, note, info) =>
+    `<div class="kpi"><div class="label">${label}${info ? ` <span class="info" data-tip="${esc(info)}">i</span>` : ""}</div>
+      <div class="value">${value}</div><div class="note">${note}</div></div>`;
+  $("kpis").innerHTML = [
+    tile("Open bets", k.open_bets, "awaiting settlement"),
+    tile("At stake", usd(k.at_risk), "paper dollars"),
+    tile("Open P&amp;L", `<span class="${cls(k.open_mtm)}">${signed(k.open_mtm)}</span>`, "marked to bid",
+      "What the open bets could be sold for right now, minus their cost. Starts negative by the bid/ask spread, especially on cheap long shots."),
+    tile("Realized P&amp;L", `<span class="${cls(k.realized)}">${signed(k.realized)}</span>`, "settled bets"),
+    tile("Win rate", k.win_rate == null ? "–" : pct(k.win_rate),
+      k.win_rate == null ? "nothing settled yet" : `${k.settled_bets} settled · model expected ${pct(k.expected_win_rate)}`),
+    tile("Skipped", k.suspect_skipped, "edge too big to trust", "Edges over 15¢ against a live market are usually model error, so they're logged but not traded."),
+  ].join("");
+}
+
+/* model vs market */
+function marketMid(b) {
+  const mids = ["kalshi", "polymarket_us"].map((v) => b[v]).filter(Boolean).map((q) =>
+    q.bid != null && q.ask != null ? (q.bid + q.ask) / 2 : q.ask != null ? q.ask / 2 : q.bid).filter((m) => m != null);
+  return mids.length ? mids.reduce((a, c) => a + c, 0) / mids.length : null;
+}
+
+function renderCities(s) {
+  document.querySelectorAll("#varSeg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.var === varFilter));
+  const q = citySearch.trim().toLowerCase();
+  const priced = s.city_days.filter((c) => c.model && c.variable === varFilter && (!q || c.city.toLowerCase().includes(q) || (c.code || "").toLowerCase().includes(q)));
+  const days = [...new Set(priced.map((c) => c.date))].sort();
+  if (!days.length) {
+    $("dateTabs").innerHTML = "";
+    $("cities").innerHTML = `<div class="placeholder">${q ? "No cities match that filter." : `No ${varFilter === "high" ? "daily-high" : "daily-low"} markets being priced right now. Same-day markets stop at noon local standard time; tomorrow's appear once forecasts are in.`}</div>`;
+    return;
+  }
+  if (!days.includes(selectedDate)) selectedDate = days[0];
+  $("dateTabs").innerHTML = days.map((d) => `<button aria-pressed="${d === selectedDate}" data-date="${d}">${dayLabel(d)}</button>`).join("");
+  $("dateTabs").querySelectorAll("button").forEach((btn) => btn.onclick = () => {
+    selectedDate = btn.dataset.date; store.set("wb.date", selectedDate); renderCities(state);
+  });
+  const held = new Set(s.positions.map((p) => p.city + "|" + p.variable + "|" + p.date + "|" + p.bracket));
+  const inputNames = { deterministic: "Models", nws_point: "NWS", gfs_ensemble_mean: "GFS ens", ecmwf_ensemble_mean: "ECMWF ens" };
+  const inputTips = { deterministic: "GFS + ECMWF deterministic runs, bias-corrected from 2.5 years of history",
+    nws_point: "National Weather Service point forecast", gfs_ensemble_mean: "Average of 31 GFS ensemble members",
+    ecmwf_ensemble_mean: "Average of 51 ECMWF ensemble members" };
+  $("cities").innerHTML = priced.filter((c) => c.date === selectedDate).map((c) => {
+    const m = c.model;
+    const inputs = Object.entries(m.centers || {}).map(([k, v]) =>
+      `<div class="inp" data-tip="${esc(inputTips[k] || k)}"><div class="k">${inputNames[k] || k}</div><div class="v">${v.toFixed(1)}°</div></div>`).join("");
+    const rows = c.brackets.map((b) => {
+      const mk = marketMid(b), md = b.model;
+      const diff = md != null && mk != null ? md - mk : null;
+      const q = (v) => b[v] ? `${venueName(v)}: bid ${b[v].bid == null ? "–" : b[v].bid.toFixed(2)} · ask ${b[v].ask == null ? "–" : b[v].ask.toFixed(2)}` : `${venueName(v)}: no quote`;
+      const tipHtml = `<b>${esc(c.city)} · ${b.label}</b><br>Model ${pct(md, 1)} · Market ${pct(mk, 1)}<br>${q("kalshi")}<br>${q("polymarket_us")}`;
+      const isHeld = held.has(c.city + "|" + c.variable + "|" + c.date + "|" + b.label);
+      const edge = diff == null || Math.abs(diff) < 0.03 ? ""
+        : `<span class="edge ${Math.abs(diff) >= 0.1 ? "big" : ""}">${diff > 0 ? "+" : "−"}${Math.round(Math.abs(diff) * 100)}</span>`;
+      return `<div class="brow" data-tip="${esc(tipHtml)}">
+        <span class="lbl ${isHeld ? "held" : ""}">${b.label}</span>
+        <div class="track">
+          ${mk != null ? `<div class="mkt" style="width:${Math.max(0, Math.min(1, mk)) * 100}%"></div>` : ""}
+          ${md != null ? `<div class="mdl" style="left:${Math.max(0, Math.min(1, md)) * 100}%"></div>` : ""}
+        </div>
+        <span class="vals"><b>${pct(md)}</b><span class="muted">${pct(mk)}</span>${edge}</span>
+      </div>`;
+    }).join("");
+    return `<div class="city">
+      <div class="city-top">
+        <div><div class="city-name">${esc(c.city)}<span class="vtag ${c.variable}">${c.variable === "high" ? "HIGH" : "LOW"}</span></div>
+          <div class="city-sub">${dayLabel(c.date)}${m.floor != null ? ` · ${c.variable === "high" ? "already hit" : "already down to"} ${m.floor}°` : ""}</div></div>
+        <div class="city-temp" data-tip="Model's best estimate of the ${c.variable}, ± typical error (1 standard deviation)"><span class="t">${m.mu?.toFixed(1)}°</span><span class="pm">± ${m.sigma?.toFixed(1)}</span></div>
+      </div>
+      <div class="inputs">${inputs}</div>
+      ${rows}
+    </div>`;
+  }).join("");
+}
+
+/* tables */
+function sortRows(rows, { key, dir }) {
+  return [...rows].sort((a, b) => {
+    const x = a[key], y = b[key];
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (typeof x === "number" ? x - y : String(x).localeCompare(String(y))) * dir;
+  });
+}
+function sortableTable(id, name, rows, cols, emptyMsg) {
+  const el = $(id);
+  if (!rows.length) { el.innerHTML = `<tbody><tr><td class="empty">${emptyMsg}</td></tr></tbody>`; return; }
+  const st = sorts[name];
+  const head = cols.map((c) => {
+    const k = c.sortKey || c.key, on = st.key === k;
+    return `<th class="sortable ${c.num ? "num" : ""}" data-key="${k}" aria-sort="${on ? (st.dir > 0 ? "ascending" : "descending") : "none"}">${c.label}${on ? `<span class="arrow">${st.dir > 0 ? "▲" : "▼"}</span>` : ""}</th>`;
+  }).join("");
+  const body = sortRows(rows, st).map((r) => "<tr>" + cols.map((c) =>
+    `<td class="${c.num ? "num" : ""} ${c.cls ? c.cls(r) : ""}">${c.fmt ? c.fmt(r) : esc(r[c.key])}</td>`).join("") + "</tr>").join("");
+  el.innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  el.querySelectorAll("th.sortable").forEach((th) => th.onclick = () => {
+    const k = th.dataset.key;
+    sorts[name] = { key: k, dir: st.key === k ? -st.dir : 1 };
+    store.set("wb.sorts", JSON.stringify(sorts));
+    sortableTable(id, name, rows, cols, emptyMsg);
+  });
+}
+const bracketLow = (b) => { const m = String(b).match(/-?\d+/); return m ? (String(b).startsWith("≤") ? +m[0] - 0.5 : +m[0]) : null; };
+const commonCols = [
+  { key: "date", label: "Date", fmt: (p) => dayLabel(p.date) },
+  { key: "city", label: "City", fmt: (p) => `<b style="font-weight:600">${esc(p.city)}</b>` },
+  { key: "variable", label: "Type", fmt: (p) => `<span class="vtag ${p.variable}" style="margin:0">${p.variable === "low" ? "LOW" : "HIGH"}</span>` },
+  { key: "bracket", label: "Bracket", sortKey: "bracketLow", fmt: (p) => p.bracket },
+  { key: "side", label: "Side", fmt: (p) => `<span class="side">${p.side}</span>` },
+  { key: "venue", label: "Exchange", fmt: (p) => venueBadge(p.venue) },
+  { key: "contracts", label: "Contracts", num: true, fmt: (p) => p.contracts },
+];
+
+function setupVenueSeg() {
+  document.querySelectorAll("#venueSeg button").forEach((b) => {
+    b.setAttribute("aria-pressed", b.dataset.venue === venueFilter);
+    b.onclick = () => {
+      venueFilter = b.dataset.venue; store.set("wb.venue", venueFilter); setupVenueSeg();
+      if (state) { renderPositions(state); renderSettled(state); renderFeed(state); }
+    };
+  });
+}
+
+function renderPositions(s) {
+  const rows = byVenue(s.positions).map((p) => ({ ...p, bracketLow: bracketLow(p.bracket) }));
+  const stake = rows.reduce((a, p) => a + p.cost, 0), mtm = rows.reduce((a, p) => a + (p.mtm || 0), 0);
+  $("posSub").innerHTML = rows.length
+    ? `${rows.length} open${venueFilter === "all" ? "" : " on " + venueName(venueFilter)} · ${usd(stake)} at stake · <span class="${cls(mtm)}">${signed(mtm)}</span> open P&amp;L · click a column to sort`
+    : "";
+  sortableTable("positions", "positions", rows, [
+    ...commonCols,
+    { key: "avg_price", label: "Paid", num: true, fmt: (p) => p.avg_price == null ? "–" : (p.avg_price * 100).toFixed(1) + "¢" },
+    { key: "model_prob", label: "Model now", num: true, fmt: (p) => pct(p.model_prob) },
+    { key: "bid", label: "Bid now", num: true, fmt: (p) => p.bid == null ? "–" : (p.bid * 100).toFixed(0) + "¢" },
+    { key: "cost", label: "Cost", num: true, fmt: (p) => usd(p.cost) },
+    { key: "mtm", label: "Open P&amp;L", num: true, fmt: (p) => signed(p.mtm), cls: (p) => cls(p.mtm) },
+  ], venueFilter === "all" ? "No open bets." : `No open bets on ${venueName(venueFilter)}.`);
+}
+
+function renderSettled(s) {
+  const rows = byVenue(s.settled).map((p) => ({ ...p, bracketLow: bracketLow(p.bracket) }));
+  sortableTable("settled", "settled", rows, [
+    ...commonCols,
+    { key: "cost", label: "Cost", num: true, fmt: (p) => usd(p.cost) },
+    { key: "result", label: "Result", fmt: (p) => p.result === "WON" ? `<span class="result-won">✓ Won</span>` : `<span class="result-lost">✕ Lost</span>` },
+    { key: "pnl", label: "P&amp;L", num: true, fmt: (p) => signed(p.pnl), cls: (p) => cls(p.pnl) },
+  ], venueFilter === "all" ? "No settled bets yet. The first ones settle the morning after each day's high is published."
+                           : `No settled bets on ${venueName(venueFilter)} yet.`);
+}
+
+/* accuracy */
+function renderAccuracy(s) {
+  const g = s.accuracy.groups;
+  const groups = [["traded", "Bets placed"], ["suspect", "Skipped: suspect"], ["skipped (other)", "Skipped: other"]];
+  const present = groups.filter(([k]) => g[k]);
+  $("accuracy").innerHTML = present.length ? `<div class="acc-grid">` + present.map(([k, name]) => {
+    const a = g[k];
+    return `<div class="acc"><div class="k">${name} · ${a.n} settled</div>
+      <div class="big ${cls(a.pnl_per_contract)}">${a.pnl_per_contract >= 0 ? "+" : "−"}${Math.abs(a.pnl_per_contract * 100).toFixed(1)}¢<span class="muted" style="font-size:12px;font-weight:500"> /contract</span></div>
+      <div class="row"><span>Won</span><b>${pct(a.actual_win_rate)}</b></div>
+      <div class="row"><span>Model expected</span><span>${pct(a.model_expected_win_rate)}</span></div>
+      <div class="row"><span>Price implied</span><span>${pct(a.price_implied_win_rate)}</span></div></div>`;
+  }).join("") + `</div><p class="muted" style="font-size:12px;margin:8px 0 0">${s.accuracy.pending} more flagged brackets waiting to settle.</p>`
+    : `<div class="placeholder">Nothing settled yet. ${s.accuracy.pending} flagged brackets are waiting.<br>First results land the morning after each day's high is published.</div>`;
+  const c = s.calibration;
+  $("calibration").innerHTML = c.n
+    ? `<div class="table-wrap"><table><thead><tr><th>Model said</th><th class="num">Predictions</th><th class="num">Avg said</th><th class="num">Happened</th></tr></thead><tbody>` +
+      Object.entries(c.buckets).map(([k, [n, p, h]]) => `<tr><td>${k}</td><td class="num">${n}</td><td class="num">${pct(p, 1)}</td><td class="num">${pct(h, 1)}</td></tr>`).join("") +
+      `</tbody></table></div><p class="muted" style="font-size:12px;margin:8px 0 0">Brier score: model <b>${c.brier_model?.toFixed(4)}</b> · market <b>${c.brier_market_mid?.toFixed(4) ?? "–"}</b> (lower is better)</p>`
+    : `<div class="placeholder">No settled predictions yet.</div>`;
+}
+
+/* P&L chart */
+function renderPnl(s) {
+  const pts = s.pnl_series, el = $("pnlChart");
+  if (!pts.length) { el.innerHTML = `<div class="placeholder">The P&amp;L line starts with the first settled bet.</div>`; return; }
+  const W = el.clientWidth || 520, H = 190, L = 52, R = 14, T = 16, B = 20;
+  const ys = pts.map((p) => p.pnl).concat([0]);
+  const ymin = Math.min(...ys), ymax = Math.max(...ys), span = (ymax - ymin) || 1;
+  const x = (i) => L + (pts.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (pts.length - 1));
+  const y = (v) => T + (ymax - v) * (H - T - B) / span;
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.pnl).toFixed(1)}`).join("");
+  const area = `${line}L${x(pts.length - 1).toFixed(1)},${y(0).toFixed(1)}L${x(0).toFixed(1)},${y(0).toFixed(1)}Z`;
+  const last = pts[pts.length - 1];
+  const ticks = [ymin, (ymin + ymax) / 2, ymax];
+  el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative realized profit, now ${signed(last.pnl)}">
+    <defs><linearGradient id="pg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--series-1)" stop-opacity=".25"/><stop offset="1" stop-color="var(--series-1)" stop-opacity="0"/></linearGradient></defs>
+    ${ticks.map((t) => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--border)"/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${signed(t)}</text>`).join("")}
+    <line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--border-strong)" stroke-dasharray="3 4"/>
+    <path d="${area}" fill="url(#pg)"/>
+    <path d="${line}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${pts.map((p, i) => `<circle cx="${x(i)}" cy="${y(p.pnl)}" r="10" fill="transparent" data-tip="${esc(new Date(p.t).toLocaleString())}<br>Cumulative ${signed(p.pnl)}"/>`).join("")}
+    <circle cx="${x(pts.length - 1)}" cy="${y(last.pnl)}" r="4.5" fill="var(--series-1)" stroke="var(--surface)" stroke-width="2"/>
+    <text x="${x(pts.length - 1)}" y="${y(last.pnl) - 10}" text-anchor="end" style="fill:var(--text);font-weight:600">${signed(last.pnl)}</text>
+  </svg>`;
+}
+
+/* feed */
+function renderFeed(s) {
+  const acts = byVenue(s.activity);
+  $("feed").innerHTML = acts.length ? acts.map((a) => `<li>
+      <span class="ic ${a.kind === "bet" ? "bet" : "skip"}" aria-label="${a.kind === "bet" ? "bet placed" : "skipped"}">${a.kind === "bet" ? "✓" : "!"}</span>
+      <div><div class="txt">${esc(a.text)}</div>
+        <div class="det">${venueName(a.venue)} · model ${pct(a.model)} vs ${a.price == null ? "–" : (a.price * 100).toFixed(0) + "¢"}</div></div>
+      <span class="t">${timeOf(a.ts)}</span></li>`).join("")
+    : `<li><div class="placeholder" style="grid-column:1/-1">No activity yet.</div></li>`;
+}
+
+async function refresh() {
+  if (location.protocol === "file:") {
+    $("updated").innerHTML = `<span class="err">This is the page file, not the dashboard. Start it with
+      <code>.venv/bin/python cli.py dashboard</code> and open <a href="http://localhost:8050">http://localhost:8050</a>.</span>`;
+    return;
+  }
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    const s = await r.json();
+    if (s.error) throw new Error(s.error);
+    state = s;
+    renderBadges(s); renderKpis(s); renderCities(s); renderPositions(s);
+    renderAccuracy(s); renderPnl(s); renderFeed(s); renderSettled(s);
+    $("updated").textContent = "Updated " + new Date().toLocaleTimeString() + " · refreshes every 30 seconds";
+  } catch (e) {
+    $("updated").innerHTML = `<span class="err">Couldn't load data (${esc(e.message)}). Is the dashboard tab still running?</span>`;
+  }
+}
+setupVenueSeg();
+document.querySelectorAll("#varSeg button").forEach((b) => b.onclick = () => {
+  varFilter = b.dataset.var; store.set("wb.var", varFilter); if (state) renderCities(state);
+});
+$("citySearch").addEventListener("input", (e) => { citySearch = e.target.value; if (state) renderCities(state); });
+refresh();
+setInterval(refresh, 30000);
+window.addEventListener("resize", () => state && renderPnl(state));
+</script>
+</body>
+</html>
